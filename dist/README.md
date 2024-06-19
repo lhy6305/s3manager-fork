@@ -1,0 +1,1 @@
+rename config_template.json to config.json before running

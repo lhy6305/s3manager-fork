@@ -7,14 +7,16 @@ import (
 	"net/http"
 	"path"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/facette/natsort"
 	"github.com/minio/minio-go/v7"
 )
 
 // HandleBucketView shows the details page of a bucket.
-func HandleBucketView(s3 S3, templates fs.FS, allowDelete bool, listRecursive bool) http.HandlerFunc {
+func HandleBucketView(s3 S3, templates fs.FS, allowDelete bool, allowDeleteBucket bool, listRecursive bool) http.HandlerFunc {
 	type objectWithIcon struct {
 		Key          string
 		Size         int64
@@ -26,11 +28,12 @@ func HandleBucketView(s3 S3, templates fs.FS, allowDelete bool, listRecursive bo
 	}
 
 	type pageData struct {
-		BucketName  string
-		Objects     []objectWithIcon
-		AllowDelete bool
-		Paths       []string
-		CurrentPath string
+		BucketName        string
+		Objects           []objectWithIcon
+		AllowDelete       bool
+		AllowDeleteBucket bool
+		Paths             []string
+		CurrentPath       string
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -64,12 +67,16 @@ func HandleBucketView(s3 S3, templates fs.FS, allowDelete bool, listRecursive bo
 			}
 			objs = append(objs, obj)
 		}
+		sort.Slice(objs, func(i, j int) bool {
+			return natsort.Compare(objs[i].Key, objs[j].Key)
+		})
 		data := pageData{
-			BucketName:  bucketName,
-			Objects:     objs,
-			AllowDelete: allowDelete,
-			Paths:       removeEmptyStrings(strings.Split(path, "/")),
-			CurrentPath: path,
+			BucketName:        bucketName,
+			Objects:           objs,
+			AllowDelete:       allowDelete,
+			AllowDeleteBucket: allowDeleteBucket,
+			Paths:             removeEmptyStrings(strings.Split(path, "/")),
+			CurrentPath:       path,
 		}
 
 		t, err := template.ParseFS(templates, "layout.html.tmpl", "bucket.html.tmpl")

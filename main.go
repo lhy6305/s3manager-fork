@@ -25,31 +25,45 @@ var templateFS embed.FS
 var staticFS embed.FS
 
 type configuration struct {
-	Endpoint            string
-	UseIam              bool
-	IamEndpoint         string
-	AccessKeyID         string
-	SecretAccessKey     string
-	Region              string
-	AllowDelete         bool
-	ForceDownload       bool
-	UseSSL              bool
-	SkipSSLVerification bool
-	SignatureType       string
-	ListRecursive       bool
-	Port                string
-	Timeout             int32
-	SseType             string
-	SseKey              string
+	Endpoint               string
+	CustomEndpointSignSalt string
+	UseIam                 bool
+	IamEndpoint            string
+	AccessKeyID            string
+	SecretAccessKey        string
+	Region                 string
+	AllowCreate            bool
+	AllowCreateBucket      bool
+	AllowDelete            bool
+	AllowDeleteBucket      bool
+	ForceDownload          bool
+	UseSSL                 bool
+	SkipSSLVerification    bool
+	SignatureType          string
+	ListRecursive          bool
+	Addr                   string
+	Timeout                int32
+	SseType                string
+	SseKey                 string
 }
 
 func parseConfiguration() configuration {
 	var accessKeyID, secretAccessKey, iamEndpoint string
 
-	viper.AutomaticEnv()
+	//viper.AutomaticEnv()
+
+	viper.SetConfigName("config")
+	viper.SetConfigType("json")
+	viper.AddConfigPath(".")
+	err := viper.ReadInConfig()
+	if err != nil {
+		panic(fmt.Errorf("fatal error config file: %w", err))
+	}
 
 	viper.SetDefault("ENDPOINT", "s3.amazonaws.com")
 	endpoint := viper.GetString("ENDPOINT")
+
+	customEndpointSignSalt := viper.GetString("CUSTOM_ENDPOINT_SIGN_SALT")
 
 	useIam := viper.GetBool("USE_IAM")
 
@@ -69,8 +83,17 @@ func parseConfiguration() configuration {
 
 	region := viper.GetString("REGION")
 
+	viper.SetDefault("ALLOW_CREATE", true)
+	allowCreate := viper.GetBool("ALLOW_CREATE")
+
+	viper.SetDefault("ALLOW_CREATE_BUCKET", false)
+	allowCreateBucket := viper.GetBool("ALLOW_CREATE_BUCKET")
+
 	viper.SetDefault("ALLOW_DELETE", true)
 	allowDelete := viper.GetBool("ALLOW_DELETE")
+
+	viper.SetDefault("ALLOW_DELETE_BUCKET", false)
+	allowDeleteBucket := viper.GetBool("ALLOW_DELETE_BUCKET")
 
 	viper.SetDefault("FORCE_DOWNLOAD", true)
 	forceDownload := viper.GetBool("FORCE_DOWNLOAD")
@@ -86,8 +109,8 @@ func parseConfiguration() configuration {
 
 	listRecursive := viper.GetBool("LIST_RECURSIVE")
 
-	viper.SetDefault("PORT", "8080")
-	port := viper.GetString("PORT")
+	viper.SetDefault("ADDR", ":8080")
+	addr := viper.GetString("ADDR")
 
 	viper.SetDefault("TIMEOUT", 600)
 	timeout := viper.GetInt32("TIMEOUT")
@@ -99,22 +122,26 @@ func parseConfiguration() configuration {
 	sseKey := viper.GetString("SSE_KEY")
 
 	return configuration{
-		Endpoint:            endpoint,
-		UseIam:              useIam,
-		IamEndpoint:         iamEndpoint,
-		AccessKeyID:         accessKeyID,
-		SecretAccessKey:     secretAccessKey,
-		Region:              region,
-		AllowDelete:         allowDelete,
-		ForceDownload:       forceDownload,
-		UseSSL:              useSSL,
-		SkipSSLVerification: skipSSLVerification,
-		SignatureType:       signatureType,
-		ListRecursive:       listRecursive,
-		Port:                port,
-		Timeout:             timeout,
-		SseType:             sseType,
-		SseKey:              sseKey,
+		Endpoint:               endpoint,
+		CustomEndpointSignSalt: customEndpointSignSalt,
+		UseIam:                 useIam,
+		IamEndpoint:            iamEndpoint,
+		AccessKeyID:            accessKeyID,
+		SecretAccessKey:        secretAccessKey,
+		Region:                 region,
+		AllowCreate:            allowCreate,
+		AllowCreateBucket:      allowCreateBucket,
+		AllowDelete:            allowDelete,
+		AllowDeleteBucket:      allowDeleteBucket,
+		ForceDownload:          forceDownload,
+		UseSSL:                 useSSL,
+		SkipSSLVerification:    skipSSLVerification,
+		SignatureType:          signatureType,
+		ListRecursive:          listRecursive,
+		Addr:                   addr,
+		Timeout:                timeout,
+		SseType:                sseType,
+		SseKey:                 sseKey,
 	}
 }
 
@@ -175,22 +202,27 @@ func main() {
 	r := mux.NewRouter()
 	r.Handle("/", http.RedirectHandler("/buckets", http.StatusPermanentRedirect)).Methods(http.MethodGet)
 	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.FS(statics)))).Methods(http.MethodGet)
-	r.Handle("/buckets", s3manager.HandleBucketsView(s3, templates, configuration.AllowDelete)).Methods(http.MethodGet)
-	r.PathPrefix("/buckets/").Handler(s3manager.HandleBucketView(s3, templates, configuration.AllowDelete, configuration.ListRecursive)).Methods(http.MethodGet)
-	r.Handle("/api/buckets", s3manager.HandleCreateBucket(s3)).Methods(http.MethodPost)
-	if configuration.AllowDelete {
-		r.Handle("/api/buckets/{bucketName}", s3manager.HandleDeleteBucket(s3)).Methods(http.MethodDelete)
+	r.Handle("/buckets", s3manager.HandleBucketsView(s3, templates, configuration.AllowDeleteBucket)).Methods(http.MethodGet)
+	r.PathPrefix("/buckets/").Handler(s3manager.HandleBucketView(s3, templates, configuration.AllowDelete, configuration.AllowDeleteBucket, configuration.ListRecursive)).Methods(http.MethodGet)
+	if configuration.AllowCreate {
+		r.Handle("/api/buckets/{bucketName}/objects", s3manager.HandleCreateObject(s3, sseType)).Methods(http.MethodPost)
 	}
-	r.Handle("/api/buckets/{bucketName}/objects", s3manager.HandleCreateObject(s3, sseType)).Methods(http.MethodPost)
-	r.Handle("/api/buckets/{bucketName}/objects/{objectName:.*}/url", s3manager.HandleGenerateUrl(s3)).Methods(http.MethodGet)
-	r.Handle("/api/buckets/{bucketName}/objects/{objectName:.*}", s3manager.HandleGetObject(s3, configuration.ForceDownload)).Methods(http.MethodGet)
+	if configuration.AllowCreateBucket {
+		r.Handle("/api/buckets", s3manager.HandleCreateBucket(s3)).Methods(http.MethodPost)
+	}
 	if configuration.AllowDelete {
 		r.Handle("/api/buckets/{bucketName}/objects/{objectName:.*}", s3manager.HandleDeleteObject(s3)).Methods(http.MethodDelete)
 	}
+	if configuration.AllowDeleteBucket {
+		r.Handle("/api/buckets/{bucketName}", s3manager.HandleDeleteBucket(s3)).Methods(http.MethodDelete)
+	}
+	//r.Handle("/api/buckets/{bucketName}/objects/{objectName:.*}/url", s3manager.HandleGenerateUrl(s3)).Methods(http.MethodGet)
+	r.Handle("/api/buckets/{bucketName}/objects/{objectName:.*}/url", s3manager.HandleCustomGenerateUrl(configuration.Endpoint, configuration.CustomEndpointSignSalt)).Methods(http.MethodGet)
+	r.Handle("/api/buckets/{bucketName}/objects/{objectName:.*}", s3manager.HandleGetObject(s3, configuration.ForceDownload)).Methods(http.MethodGet)
 
 	lr := logging.Handler(os.Stdout)(r)
 	srv := &http.Server{
-		Addr:         ":" + configuration.Port,
+		Addr:         configuration.Addr,
 		Handler:      lr,
 		ReadTimeout:  serverTimeout,
 		WriteTimeout: serverTimeout,

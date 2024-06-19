@@ -4,6 +4,7 @@ go 1.22.3
 
 require (
 	github.com/cloudlena/adapters v0.0.0-20240322125045-abf8f432c5f9
+	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/gorilla/mux v1.8.1
 	github.com/matryer/is v1.4.1
 	github.com/minio/minio-go/v7 v7.0.71

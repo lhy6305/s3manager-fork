@@ -13,8 +13,8 @@
 
 <nav class="nav-extended">
     <div class="nav-wrapper container">
-        <a href="/buckets/{{$.BucketName}}" class="brand-logo center"><i class="material-icons">folder_open</i>{{ .BucketName }}</a>
-        {{ if not .Objects }}
+        <a href="/@s3manager/buckets/{{$.BucketName}}" class="brand-logo center"><i class="material-icons">folder_open</i>{{ .BucketName }}</a>
+        {{ if not .Objects }}{{ if $.AllowDeleteBucket }}
         <ul class="right">
             <li>
                 <a class="waves-effect waves-light btn" href="#" onclick="deleteBucket({{ .BucketName }})">
@@ -22,12 +22,12 @@
                 </a>
             </li>
         </ul>
-        {{ end }}
+        {{ end }}{{ end }}
     </div>
 
     <div class="nav-wrapper container">
-        <a href="/buckets" class="breadcrumb"><i class="material-icons">arrow_back</i> buckets </a>
-        {{ $url := printf "/buckets/%s/" $.BucketName }}
+        <a href="/@s3manager/buckets" class="breadcrumb"><i class="material-icons">arrow_back</i> buckets </a>
+        {{ $url := printf "/@s3manager/buckets/%s/" $.BucketName }}
         <a href="{{ $url }}" class="breadcrumb">{{ $.BucketName }}</a>
 
         {{ range $index, $path := .Paths }}
@@ -56,7 +56,7 @@
             <tr>
                 <td
                     {{ if $object.IsFolder }}
-                    onclick="location.href='/buckets/{{ $.BucketName }}/{{ $object.Key }}'"}
+                    onclick="location.href='/@s3manager/buckets/{{ $.BucketName }}/{{ $object.Key }}'"}
                     style="cursor:pointer;"
                     {{ end }}>
                     <i class="material-icons">{{ $object.Icon }}</i> {{ $object.DisplayName }}
@@ -71,7 +71,7 @@
                         </button>
                         <!-- Dropdown Structure -->
                         <ul id="actions-dropdown-{{ $index }}" class="dropdown-content">
-                            <li><a target="_blank" href="/api/buckets/{{ $.BucketName }}/objects/{{ $object.Key }}">Download</a></li>
+                            <li><a target="_blank" href="/@s3manager/api/buckets/{{ $.BucketName }}/objects/{{ $object.Key }}">Download</a></li>
                             <li><a onclick="handleOpenDownloadLinkModal({{ $object.Key }})">Download link</a></li>
                             {{- if $.AllowDelete }}
                             <li><a href="#" onclick="deleteObject({{ $.BucketName }}, {{ $object.Key }})">Delete</a></li>
@@ -147,7 +147,7 @@
                 <h4>Create download link for </h4>
                 <input name="objectName" id="objectName" type="text" readonly>
             </div>
-            <div class="row">
+            <!-- <div class="row">
                 <div class="col s4">
                     <div class="input-field">
                         <input name="day" id="gen-link-day" value="0" type="text" pattern="^[\d]+$" class="validate">
@@ -169,7 +169,7 @@
                         <span class="helper-text" data-error="Invalid minute format"></span>
                     </div>
                 </div>
-            </div>
+            </div> -->
             <div class="row">
                 <div class="col s3">
                     <button id="create-link-btn" class="waves-effect waves-green btn">Create link</button>
@@ -192,7 +192,7 @@
 function deleteObject(bucketName, objectName) {
     $.ajax({
         type: 'DELETE',
-        url: '/api/buckets/' + bucketName + '/objects/' + objectName,
+        url: '/@s3manager/api/buckets/' + bucketName + '/objects/' + objectName,
         success: function () { location.reload(); }
     })
 }
@@ -200,14 +200,14 @@ function deleteObject(bucketName, objectName) {
 function deleteBucket(bucketName) {
     $.ajax({
         type: 'DELETE',
-        url: '/api/buckets/' + bucketName,
-        success: function () { window.location.replace('/buckets'); }
+        url: '/@s3manager/api/buckets/' + bucketName,
+        success: function () { window.location.replace('/@s3manager/buckets'); }
     })
 }
 
 function handleUploadFiles(event) {
     files = event.target.files
-    url = "/api/buckets/{{ .BucketName }}/objects"
+    url = "/@s3manager/api/buckets/{{ .BucketName }}/objects"
     uploadFiles(files, url);
 }
 
@@ -243,12 +243,15 @@ function uploadFiles(files, url) {
 
 function uploadFile(file, url) {
     const formData = new FormData();
-    formData.append('file', file);
     if( !!file.webkitRelativePath ) {
         formData.append('path', "{{ .CurrentPath }}" + file.webkitRelativePath );
     } else {
         formData.append('path', "{{ .CurrentPath }}" + file.name );
     }
+    formData.append('size', file.size);
+
+    // add the file content at the end for server multi-part parsing
+    formData.append('file', file);
 
     const notification = createNotification(file.name);
     notifications = document.getElementById('notifications');
@@ -299,7 +302,7 @@ function handleGenerateDownloadLink(event) {
 
     $.ajax({
         type: 'GET',
-        url: '/api/buckets/' + {{ $.BucketName }}+ "/objects/" + objectName + "/url?expiry=" + expiryTime,
+        url: '/@s3manager/api/buckets/' + {{ $.BucketName }}+ "/objects/" + objectName + "/url?expiry=" + expiryTime,
         success: function (result) {
             genUrlMessage.innerHTML = "";
             document.getElementById("generated-link").setAttribute('value', JSON.parse(result).url);
@@ -310,6 +313,7 @@ function handleGenerateDownloadLink(event) {
     });
 }
 
+/*
 function handleCopyLink() {
     const url = document.getElementById("generated-link").value;
 
@@ -320,6 +324,66 @@ function handleCopyLink() {
             console.error('Could not copy:', err);
         });
     }
+}
+*/
+
+function handleCopyLink() {
+    var url = document.getElementById("generated-link").value;
+
+    if(!url) {
+        M.toast({html: 'URL is empty!'});
+        return;
+    }
+    if(window.clipboardData) {  // for IE only
+        window.clipboardData.setData('Text', url);
+        M.toast({html: 'Copied to clipboard!'});
+        return;
+    }
+
+    var msg = 'Could not copy';
+    if(window.navigator && window.navigator.clipboard && window.navigator.clipboard.writeText) {
+        // works in modern browsers
+        try {
+            window.navigator.clipboard.writeText(url).then(function() {
+                msg = 'Copied to clipboard!';
+                M.toast({html: msg});
+            }, function(err) {
+                console.error(err);
+                msg += ": " + err;
+                M.toast({html: msg});
+            });
+        } catch(err) {
+            console.error(err);
+            msg += ": " + err;
+            M.toast({html: msg});
+        }
+        return;
+    }
+    // use the fallback method
+    var textArea = document.createElement("textarea");
+    textArea.value = url;
+    textArea.style.top = "0";
+    textArea.style.left = "0";
+    textArea.style.position = "fixed";
+    textArea.readOnly = true;
+    try {
+        textArea.setAttribute("readonly", "readonly");
+    } catch {}
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+
+    try {
+        var successful = document.execCommand('copy');
+        if(successful) {
+            msg = 'Copied to clipboard!';
+        }
+    } catch(err) {
+        console.error(err);
+        msg += ": " + err;
+    }
+    document.body.removeChild(textArea);
+    M.toast({html: msg});
 }
 
 window.onload = (event) => {
