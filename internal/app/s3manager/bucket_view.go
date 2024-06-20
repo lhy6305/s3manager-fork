@@ -68,6 +68,9 @@ func HandleBucketView(s3 S3, templates fs.FS, allowDelete bool, allowDeleteBucke
 			objs = append(objs, obj)
 		}
 		sort.Slice(objs, func(i, j int) bool {
+			if objs[i].IsFolder != objs[j].IsFolder {
+				return objs[i].IsFolder
+			}
 			return natsort.Compare(objs[i].Key, objs[j].Key)
 		})
 		data := pageData{
@@ -100,12 +103,26 @@ func icon(fileName string) string {
 
 	e := path.Ext(fileName)
 	switch e {
-	case ".tgz", ".gz", ".zip":
-		return "archive"
-	case ".png", ".jpg", ".gif", ".svg":
+	case ".aac", ".aiff", ".au", ".flac", ".m4a", ".mka", ".mid", ".mp3", ".mpa", ".ogg", ".opus", ".ra", ".wav", ".wma":
+		return "audio_track"
+	case ".apk":
+		return "android"
+	case ".3g2", ".3gp", ".avi", ".flv", ".h264", ".m4v", ".mkv", ".mov", ".mp4", ".mpeg", ".mpg", ".rm", ".swf", ".ts", ".vob", ".wmv":
+		return "ondemand_video"
+	case ".c", ".cc", ".cpp", ".cs", ".h", ".htm", ".html", ".java", ".js", ".php", ".pl", ".py", ".sh", ".swift", ".vb", ".xml", ".css", ".bat", ".json", ".hpp":
+		return "code"
+	case ".dat", ".doc", ".docx", ".ods", ".odp", ".odt", ".pdf", ".ppt", ".pptx", ".rtf", ".tex", ".txt", ".wpd", ".xls", ".xlsx", ".csv":
+		return "article"
+	case ".dmg", ".toast", ".vcd":
+		return "album"
+	case ".db", ".dbf", ".mdb", ".pdb", ".sql":
+		return "storage"
+	case ".fon", ".fnt", ".otf", ".ttf", ".woff", ".woff2":
+		return "font_download"
+	case ".ai", ".bmp", ".eps", ".gif", ".heif", ".ico", ".indd", ".jpeg", ".jpg", ".png", ".raw", ".svg", ".tiff", ".webp":
 		return "photo"
-	case ".mp3", ".wav":
-		return "music_note"
+	case ".7z", ".arj", ".bz", ".gz", ".iso", ".jar", ".pkg", ".rar", ".rpm", ".tar", ".tgz", ".zip", ".deb", ".xz":
+		return "folder_zip"
 	}
 
 	return "insert_drive_file"

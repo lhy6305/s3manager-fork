@@ -4,8 +4,6 @@ Thumbs.db
 Desktop.ini
 
 
-/dist/*.exe
-/dist/*.elf
 /git-*.bat
 /git-*.sh
 /ssh-*
