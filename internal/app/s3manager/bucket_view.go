@@ -104,7 +104,7 @@ func icon(fileName string) string {
 	e := path.Ext(fileName)
 	switch e {
 	case ".aac", ".aiff", ".au", ".flac", ".m4a", ".mka", ".mid", ".mp3", ".mpa", ".ogg", ".opus", ".ra", ".wav", ".wma":
-		return "audio_track"
+		return "audiotrack"
 	case ".apk":
 		return "android"
 	case ".3g2", ".3gp", ".avi", ".flv", ".h264", ".m4v", ".mkv", ".mov", ".mp4", ".mpeg", ".mpg", ".rm", ".swf", ".ts", ".vob", ".wmv":
